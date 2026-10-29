@@ -12,7 +12,9 @@ pkill nc
 echo "The server is running at $IP, port=$PORT"
 
 function handleAssignment() {
-    echo "Heard: assignment command"
+    HTMLPAGE=$(curl -s https://www.sydney.edu.au/units/INFO1112/2026-S2C-ND-CC | html2text)
+    point=$(echo HTMLPAGE | grep "Creative Work")
+    echo "$point"
 }
 
 function handlePopulation() {
