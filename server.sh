@@ -40,11 +40,11 @@ function handlePopulation() {
     fi
 
     POPULATION=$(echo "$CSVPAGE" | awk "NR==2" | awk -F, '{print $NF}')
-    echo "Population of NSW: $POPULATION"
+    echo "Population of NSW: $POPULATION" >&2
 }
 
 # Need to keep connection to client open to send
-# back data. use a 
+# back data. 
 rm -f /tmp/request
 mkfifo /tmp/request
 while true; do
