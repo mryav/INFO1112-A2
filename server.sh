@@ -13,10 +13,16 @@ echo "The server is running at $IP, port=$PORT"
 
 function handleAssignment() {
     HTMLPAGE=$(curl -s https://www.sydney.edu.au/units/INFO1112/2026-S2C-ND-CC | html2text -width 1000 | grep -A2 "Assignment 2")
+    if [ $? -ne 0 ]; then
+        echo "Error: could not download unit page" >&2
+        echo "Error: could not download unit page"
+        return 1
+    fi
+    
     echo "$HTMLPAGE" >&2
 
     ASSIGNMENT_TITLE=$(echo "$HTMLPAGE" | awk "NR==1" | awk -F'  +' '{print $2}')
-    ASSIGNMENT_TOPIC=$(echo "$HTMLPAGE" | awk "NR==2" | awk -F'  +' '{print $2}') # The true field is 'Programming task - Networking Concepts' NOT just 'Networking'.
+    ASSIGNMENT_TOPIC=$(echo "$HTMLPAGE" | awk "NR==2" | awk -F'  +' '{print $2}') # The true field is 'Programming task - Networking Concepts' NOT just 'Networking'. This is an error in the assignment description.
     ASSIGNMENT_DUE_DATE=$(echo "$HTMLPAGE" | awk "NR==2" | awk -F'  +' '{print $4}' | awk -F: '{print $2":"$3}')
     ASSIGNMENT_POINTS=$(echo "$HTMLPAGE" | awk "NR==2" | awk -F'  +' '{print $3}' | awk -F'%' '{print $1}')
 
@@ -26,7 +32,15 @@ function handleAssignment() {
 }
 
 function handlePopulation() {
-    echo "Heard: population command"
+    CSVPAGE=$(curl -s https://dbr.abs.gov.au/processedData/csv/STE_1.csv)
+    if [ $? -ne 0 ]; then
+        echo "Error: could not download NSW population data" >&2
+        echo "Error: could not download NSW population data"
+        return 1
+    fi
+
+    POPULATION=$(echo "$CSVPAGE" | awk "NR==2" | awk -F, '{print $NF}')
+    echo "Population of NSW: $POPULATION"
 }
 
 # Need to keep connection to client open to send
@@ -43,7 +57,7 @@ while true; do
         elif [ $COMMAND = "population" ]; then
             handlePopulation
         else
-            echo "404 unknown request!"
+            echo "Error: Unknown Request!"
         fi
     } > /tmp/request
 done
