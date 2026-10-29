@@ -11,6 +11,29 @@ pkill nc
 
 echo "The server is running at $IP, port=$PORT"
 
+function handleAssignment() {
+    echo "Heard: assignment command"
+}
+
+function handlePopulation() {
+    echo "Heard: population command"
+}
+
+# Need to keep connection to client open to send
+# back data. use a 
+rm -f /tmp/request
+mkfifo /tmp/request
 while true; do
-    nc -l -v 1234
+    nc -l -v 1234 < /tmp/request | {
+        read -r REQUEST
+        COMMAND=$( echo "$REQUEST" | tr -d '\r')
+
+        if [ $COMMAND = "assignment" ]; then
+            handleAssignment
+        elif [ $COMMAND = "population" ]; then
+            handlePopulation
+        else
+            echo "404 unknown request!"
+        fi
+    } > /tmp/request
 done
