@@ -1,12 +1,20 @@
 # =============================================================
 # macOS has problems with nc, so I run a temporary 
-# client in the terminal using
+# client in the terminal, and install nc openbsd ver 
+# because busybox nc closes too early to catch the output
+# 
 # $ docker run --rm -it alpine sh
+# $ apk add netcat-openbsd
+# 
 # ------------------------------------------------------------
 # Commonly used commands
 # / # echo "assignment" | nc 172.17.0.2 1234
 # / # echo "population" | nc 172.17.0.2 1234 > population.png
 # =============================================================
+
+
+const_POI_URL="https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_POI/MapServer/0/query"
+const_POI_RADIUS=5000 
 
 # Kill all previous open nc background processes
 # then open netcat in the background, waiting 1ms
@@ -21,11 +29,15 @@ pkill nc
 
 echo "The server is running at $IP, port=$PORT"
 
+function e() {
+    echo "$1" >&2
+    echo "$1"
+}
+
 function handleAssignment() {
     HTMLPAGE=$(curl -s https://www.sydney.edu.au/units/INFO1112/2026-S2C-ND-CC)
     if [ $? -ne 0 ]; then
-        echo "Error: could not download unit page" >&2
-        echo "Error: could not download unit page"
+        e "Error: could not download unit page"
         return 1
     fi
 
@@ -46,21 +58,20 @@ function handleAssignment() {
 function handlePopulation() {
     CSVPAGE=$(curl -s https://dbr.abs.gov.au/processedData/csv/STE_1.csv)
     if [ $? -ne 0 ]; then
-        echo "Error: could not download NSW population data" >&2
-        echo "Error: could not download NSW population data"
+        e "Error: could not download NSW population data"
         return 1
     fi
 
     POPULATION=$(echo "$CSVPAGE" | awk "NR==2" | awk -F, '{print $NF}')
     echo "Population of NSW: $POPULATION" >&2
 
-    echo "$CSVPAGE" | tr -d '\r' | awk -F, '
+    # the API sends a CSV which has CRLF (windows stuff) formatting so must strip using tr
+    echo "$CSVPAGE" | tr -d '\r' | awk -F, '  
     NR==1          { for (i=4; i<=NF; i++) year[i] = $i }
     $1=="ERP_P_20" { for (i=4; i<=NF; i++) if ($i != "") print year[i] "," $i }' > population_data.csv
 
     if [ ! -s population_data.csv ]; then
-        echo "Error: no population data found in the CSV" >&2
-        echo "Error: no population data found in the CSV"
+        e "Error: no population data found in the CSV"
         return 1
     fi
 
@@ -96,8 +107,7 @@ plt.savefig(out_file)
 PYEOF
 
     if [ $? -ne 0 ] || [ ! -s population.png ]; then
-        echo "Error: could not generate population.png" >&2
-        echo "Error: could not generate population.png"
+        e "Error: could not generate population.png"
         return 1
     fi
 
@@ -105,19 +115,87 @@ PYEOF
     cat population.png
 }
 
-# Need to keep connection to client open to send
-# back data. 
+
+function handlePOI() {
+    # grep -Eq '^-?[0-9.]+,-?[0-9.]+$'
+    ARG="$1"
+
+    if echo "$ARG" | grep -Eq '^-?[0-9.]+,-?[0-9.]+$'; then
+        poi_LATITUDE=$(echo "$ARG" | awk -F, '{print $1}')
+        poi_LONGITUDE=$(echo "$ARG" | awk -F, '{print $2}')
+        # echo "coordinates latitude=$poi_LATITUDE longitude=$poi_LONGITUDE" >&2
+        getPOIByCoords "$poi_LATITUDE" "$poi_LONGITUDE"
+    else
+        NAME=$(echo "$ARG")
+        # echo "POI name ${NAME^^}" >&2
+        getPOIByName "${NAME^^}"
+    fi
+
+}
+
+# response=$( curl -s -G \
+# --data-urlencode "where=poiname='FISHER LIBRARY SYDNEY UNIVERSITY'" \
+# --data-urlencode 'outFields=*" \
+# --data-urlencode "returnGeometry=true" \
+# -data-urlencode "f=json" \
+# "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_POI/MapServer/0/query")
+
+function getPOIByName() {
+    POI_NAME=$1
+
+    response=$(curl -s -G \
+        --data-urlencode "where=poiname='$POI_NAME'" \
+        --data-urlencode "outFields=poiname" \
+        --data-urlencode "returnGeometry=true" \
+        --data-urlencode "outSR=4326" \
+        --data-urlencode "f=json" \
+        "$const_POI_URL")
+
+    POI_LAT=$(echo "$response" | jq '.features[0].geometry.y' 2>/dev/null)
+    POI_LONG=$(echo "$response" | jq '.features[0].geometry.x' 2>/dev/null)
+
+    getPOIByCoords "$POI_LAT" "$POI_LONG"
+}
+
+function getPOIByCoords() {
+    POI_LAT=$1
+    POI_LONG=$2
+
+    response=$(curl -s -G \
+        --data-urlencode "where=1=1" \
+        --data-urlencode "geometry=${POI_LONG},${POI_LAT}" \
+        --data-urlencode "geometryType=esriGeometryPoint" \
+        --data-urlencode "inSR=4326" \
+        --data-urlencode "distance=${const_POI_RADIUS}" \
+        --data-urlencode "units=esriSRUnit_Meter" \
+        --data-urlencode "outFields=poiname,poitype" \
+        --data-urlencode "returnGeometry=true" \
+        --data-urlencode "outSR=4326" \
+        --data-urlencode "f=json" \
+        "$const_POI_URL")
+
+    if [ -z "$response" ]; then
+        e "Error: could not complete req"
+        return 1
+    fi
+
+    echo "$response" | jq '[.features[] | {name: .attributes.poiname, type: .attributes.poitype, latitude: .geometry.y, longitude: .geometry.x}]'
+}
+
 rm -f /tmp/request
 mkfifo /tmp/request
 while true; do
     nc -l -v 1234 < /tmp/request | {
         read -r REQUEST
-        COMMAND=$( echo "$REQUEST" | tr -d '\r')
+        COMMAND=$( echo "$REQUEST" | tr -d '\r')  #prevents cr errors
 
         if [ "$COMMAND" = "assignment" ]; then
             handleAssignment
         elif [ "$COMMAND" = "population" ]; then
             handlePopulation
+        elif echo "$COMMAND" | grep -q "^poi "; then
+            ARG=$(echo "$COMMAND" | cut -d' ' -f2-)
+            handlePOI "$ARG"
         else
             echo "Error: Unknown Request!"
         fi
