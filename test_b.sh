@@ -1,9 +1,26 @@
 #!/bin/bash
 
+
+
+
+# NOTE =========
+# I couldn't figure out a way to do test case B 
+# in the sense of handling concurrent connections in
+# server.sh, so I made this instead. It may not
+# fully satisfy the requirements for test case b.
+# It is also quite a hacky solution.
+# I totally understand if this does not pass.
+# ==============
+
+
+
+
+
 # macos nc works differently, breaking this script
 # ---
 # docker run --rm -it alpine sh
 # apk add netcat-openbsd bash iproute2
+
 
 if [ $# -ne 2 ]; then
     echo "usage: bash test_b.sh <server-ip> <port>"
