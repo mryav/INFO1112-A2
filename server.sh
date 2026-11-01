@@ -45,6 +45,7 @@ function handleAssignment() {
     
     echo "$HTMLPAGE" >&2
 
+    # from https://stackoverflow.com/questions/22190902/cut-or-awk-command-to-print-first-field-of-first-row
     ASSIGNMENT_TITLE=$(echo "$HTMLPAGE" | awk "NR==1" | awk -F'  +' '{print $2}')
     ASSIGNMENT_TOPIC=$(echo "$HTMLPAGE" | awk "NR==2" | awk -F'  +' '{print $2}') # The true field is 'Programming task - Networking Concepts' NOT just 'Networking'. This is an error in the assignment description.
     ASSIGNMENT_DUE_DATE=$(echo "$HTMLPAGE" | awk "NR==2" | awk -F'  +' '{print $4}' | awk -F: '{print $2":"$3}')
@@ -66,6 +67,7 @@ function handlePopulation() {
     echo "Population of NSW: $POPULATION" >&2
 
     # the API sends a CSV which has CRLF (windows stuff) formatting so must strip using tr
+    # from https://www.tutorialspoint.com/awk/awk_loops.htm 
     echo "$CSVPAGE" | tr -d '\r' | awk -F, '  
     NR==1          { for (i=4; i<=NF; i++) year[i] = $i }
     $1=="ERP_P_20" { for (i=4; i<=NF; i++) if ($i != "") print year[i] "," $i }' > population_data.csv
